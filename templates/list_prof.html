@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div>
+    {% if op == "ul" or op == "ol"%}
+    <{{op}}>
+        {% for pr in list_prof %}
+        <li>{{pr}}</li>
+        {% endfor %}
+    </{{op}}>
+    {% else %}
+    <p> Неверный параметр </p>
+    {% endif %}
+</div>
+{% endblock %}
