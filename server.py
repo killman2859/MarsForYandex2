@@ -2,20 +2,30 @@ import random
 import datetime
 
 from flask import Flask, render_template, request, redirect
+from pyexpat.errors import messages
+
 from config import KEY_CSRF
 from loginform import LoginForm
+from registrationform import RegistrationForm
 from data import db_session
 from data.users import User
 from data.jobs import Jobs
+from flask_login import LoginManager, login_user, logout_user
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = KEY_CSRF
+
+login_manager = LoginManager()
+login_manager.init_app(app)
 
 
 @app.route('/')
 def index():
     return render_template("index.html", username="Иванов", title="Миссия колонизации Марса")
+
+
 temp = ""
+
 
 @app.route('/registration_wtf', methods=['POST', 'GET'])
 def registration_wtf():
@@ -30,21 +40,36 @@ def registration_wtf():
 def success():
     return render_template("success.html", form=temp)
 
+
 @app.route('/registration', methods=['POST', 'GET'])
 def registration():
-    if request.method == 'GET':
-        return render_template("registration.html")
-    elif request.method == 'POST':
-        man = dict()
-        man['email'] = request.form.get("email")
-        man['school_class'] = request.form.get("class")
-        man['about'] = request.form.get("about")
-        return render_template("auto_answer.html", **man)
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        session = db_session.create_session()
+        if session.query(User).filter(User.email == form.email.data).first():
+            return render_template("registration.html", form=form, message="Такой пользователь уже существует!")
+        user = User(name=form.name.data, email=form.email.data)
+
+        user.set_password(form.password.data)
+
+        session.add(user)
+        session.commit()
+        return redirect("/login")
+    return render_template("registration.html", form=form)
+
 
 list_profession = ["капитан", "пилот", "строитель", "врач"]
+
+
 @app.route('/list_prof/<num>')
 def list_prof(num):
     return render_template("list_prof.html", list_prof=list_profession, op=num)
+
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect("/base")
 
 
 @app.route('/training/<prof>')
@@ -74,10 +99,32 @@ def image_mars():
 
 @app.route('/log_jobs')
 def log_jobs():
-        session = db_session.create_session()
-        jobs = session.query(Jobs).all()
-        print(len(jobs))
-        return render_template('log_jobs.html', jobs=jobs)
+    session = db_session.create_session()
+    jobs = session.query(Jobs).all()
+    print(len(jobs))
+    return render_template('log_jobs.html', jobs=jobs)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.email == form.email.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            return redirect("/")
+        return render_template('login.html',
+                               message="Неправильный логин или пароль",
+                               form=form)
+    return render_template('login.html', title='Авторизация', form=form)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    db_sess = db_session.create_session()
+    return db_sess.query(User).get(user_id)
+
 
 def init():
     session = db_session.create_session()
